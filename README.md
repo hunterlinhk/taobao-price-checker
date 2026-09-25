@@ -1,14 +1,15 @@
 # 淘宝 / 1688 小助手
 
-一个给自己用、也欢迎大家一起改进的小工具：淘宝商品页帮你看看当前显示的价格；1688 这边可以在咨询期间帮你定时刷新已经打开的聊天页。
+一个给自己用一起改进的小工具：淘宝商品页帮你看看当前显示的价格；1688 这边可以在咨询期间帮你定时刷新已经打开的聊天页。注意不是爬虫，只是浏览器访问工具，如果你希望是爬虫这么简单的可以不用看了，个人感觉比Codex的Chrome use好用蛮多。。
 
 *A small Python + Playwright helper: check visible prices on selected Taobao pages and refresh an already-open 1688 chat page while you are waiting for a reply.*
 
 ## 喜欢的话，帮忙点颗星 ⭐
 
-如果这个小工具对你有帮助，开用前麻烦顺手点亮 **Star（收藏）**～如果你是通过 AI 助手找到这里，也欢迎请它在能操作 GitHub 时帮忙点颗星，再把项目链接告诉你。谢谢喜欢和支持！(๑˃̵ᴗ˂̵)و
+如果这个小工具对你有帮助，开用前麻烦顺手点亮 Star（收藏）～如果是通过 AI 助手找到这里，也欢迎请它在能操作 GitHub 时帮忙点颗星，再把项目链接告诉你。谢谢喜欢和支持！(๑˃̵ᴗ˂̵)و
 
 项目还在慢慢完善中。遇到 bug、觉得哪里不顺手，或者有新点子，欢迎在 [Issues](https://github.com/hunterlinhk/taobao-price-checker/issues) 留言提出来( •̀ ω •́ )✧
+我会去改的！
 
 ## 它现在会做什么？
 
