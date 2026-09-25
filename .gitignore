@@ -3,6 +3,11 @@ storage_state.json
 __pycache__/
 *.pyc
 
+# Local environment configuration and credentials.
+.env
+.env.*
+!.env.example
+
 # Local accounts, browser sessions, and real browsing data.
 storage_state*.json
 products.json
