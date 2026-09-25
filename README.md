@@ -1,8 +1,8 @@
-# 淘宝 / 1688 小助手
+# 淘宝 / 1688 AI 小助手
 
-一个给自己用一起改进的小工具：淘宝商品页帮你看看当前显示的价格；1688 这边可以在咨询期间帮你定时刷新已经打开的聊天页。注意不是爬虫，只是浏览器访问工具，如果你希望是爬虫这么简单的可以不用看了，个人感觉比Codex的Chrome use好用蛮多。。
+一个给自己用、也方便 AI 调用的小工具：通过真实浏览器读取淘宝 / 天猫商品页当前显示的价格、规格、运费等信息；1688 这边可以搜索商品、读取规格价格和库存，也可以在咨询期间帮你定时刷新已经打开的聊天页。它更像是给 AI Agent 用的浏览器数据采集层，不是爬虫，也不会替你下单或发消息。个人感觉比 Codex 的 Chrome use 好用蛮多。。
 
-*A small Python + Playwright helper: check visible prices on selected Taobao pages and refresh an already-open 1688 chat page while you are waiting for a reply.*
+*Browser data acquisition tools for AI agents working with Taobao, Tmall and 1688, powered by Python + Playwright.*
 
 ## 喜欢的话，帮忙点颗星 ⭐
 
