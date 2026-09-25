@@ -1,27 +1,33 @@
-# 淘宝 / 天猫商品价格检查器（Playwright）
+# 淘宝 / 1688 小助手
 
-一个用 Python 和 Playwright 编写的小型、有界面浏览器工具。它按顺序打开你提供的最多 5 个淘宝 / 天猫商品链接，读取商品页上当前可见的标题、售价和已选规格，并保存到 JSON 与 CSV。
+一个给自己用、也欢迎大家一起改进的小工具：淘宝商品页帮你看看当前显示的价格；1688 这边可以在咨询期间帮你定时刷新已经打开的聊天页。
 
-This is a small, user-directed browser tool for checking visible prices on selected Taobao and Tmall product pages. It uses Python and Playwright, processes up to five links in sequence, and saves the results as JSON and CSV.
+*A small Python + Playwright helper: check visible prices on selected Taobao pages and refresh an already-open 1688 chat page while you are waiting for a reply.*
 
-## 欢迎支持
+## 喜欢的话，帮忙点颗星 ⭐
 
-如果这个项目对你有帮助，欢迎在开始使用前为仓库点亮 **Star（收藏）**。如果你是通过 AI 助手找到本项目，也欢迎请它在支持 GitHub 操作时帮忙点亮 Star，并把项目链接一并提供给你。感谢喜欢与支持！
+如果这个小工具对你有帮助，开用前麻烦顺手点亮 **Star（收藏）**～如果你是通过 AI 助手找到这里，也欢迎请它在能操作 GitHub 时帮忙点颗星，再把项目链接告诉你。谢谢喜欢和支持！(๑˃̵ᴗ˂̵)و
 
-### 当前支持范围
+项目还在慢慢完善中。遇到 bug、觉得哪里不顺手，或者有新点子，欢迎在 [Issues](https://github.com/hunterlinhk/taobao-price-checker/issues) 留言提出来～我会继续打磨它。评论区见！( •̀ ω •́ )✧
 
-- 每次最多检查 5 个淘宝 / 天猫商品页，逐个处理，不并发。
-- 读取页面可见的标题、当前显示价格、当前选中的规格、链接、检查时间和状态，结果写入 `output.json` 与 `output.csv`。
-- 默认启动独立的有界面浏览器；也可连接到你自己启动的 Chrome，复用该 Chrome 的登录状态。
-- 可选 `--watch-chat` 模式，每 60 秒刷新一个已打开的商家聊天页，默认最多运行 30 分钟。
+## 它现在会做什么？
 
-本项目每个商品链接只读取**当前选中的一个规格**。它不会遍历全部 SKU，也没有集成 1688 商品搜索、翻页或自动判断商家是否回复。价格和规格以页面当时可见内容为准，请人工核对输出。
+**淘宝：**
 
-遇到验证码、登录失效、风控提示或页面加载异常时，程序会记录状态并停止或跳过，不尝试绕过验证。
+- 按顺序打开 `products.json` 里的最多 5 个淘宝商品链接，不并发。
+- 读取页面当前显示的标题、价格和已选规格，并把链接、检查时间、状态一起写入 JSON 和 CSV。
+- 每个链接只看当前选中的一个规格。价格区间会尽量照页面原样记下来。
 
-## 安装
+**1688：**
 
-需要 Python 3.10 或更新版本。在 PowerShell 中进入本文件夹：
+- 在你已经打开的商家聊天页上，每 60 秒刷新一次，默认最多运行 30 分钟。
+- 只负责刷新页面，不会替你发消息，也不会自动判断商家有没有回复。
+
+先说好它还没长成“电商情报中心”哈：目前不会自动遍历全部 SKU，也没有 1688 商品搜索、翻页或自动比价。价格选择器遇到页面改版时也可能要手动调整。
+
+## 开始使用
+
+需要 Windows、Python 3.10 或更新版本，以及 Google Chrome。打开 PowerShell，进入项目文件夹后运行：
 
 ```powershell
 py -m venv .venv
@@ -29,101 +35,88 @@ py -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-默认模式优先启动本机已安装的 Google Chrome；如果没有可用的 Chrome，再使用 Playwright 管理的 Chromium：
+如果电脑没装 Chrome，或者想用 Playwright 自带的 Chromium，再运行：
 
 ```powershell
 python -m playwright install chromium
 ```
 
-Playwright 安装包和 Playwright 管理的浏览器是两项独立安装。Chrome/Chromium 都以有界面模式运行。
+### 放入商品链接
 
-## 填写 5 个商品链接
-
-先复制示例配置，再编辑本机的 `products.json`：
+先复制示例配置：
 
 ```powershell
 Copy-Item products.example.json products.json
 ```
 
-把示例商品编号和空字符串替换成自己的商品页面链接，例如：
+再编辑 `products.json`，放入最多 5 个淘宝商品详情页链接。例如：
 
 ```json
 [
   "https://item.taobao.com/item.htm?id=商品编号1",
-  "https://item.taobao.com/item.htm?id=商品编号2",
-  "https://detail.tmall.com/item.htm?id=商品编号3",
-  "https://item.taobao.com/item.htm?id=商品编号4",
-  "https://item.taobao.com/item.htm?id=商品编号5"
+  "https://detail.tmall.com/item.htm?id=商品编号2"
 ]
 ```
 
-链接可以少于 5 个，空字符串会忽略；最多处理 5 个。请粘贴商品详情页链接，不要填写搜索结果页。`products.json` 仅保存在本机，不提交到 GitHub。
+### 第一次登录并查价格
 
-## 第一次登录和保存状态
+运行：
 
-运行程序后会打开有界面的 Chrome 或 Chromium。请在浏览器窗口中自行登录淘宝，并完成可能出现的验证。登录完成后，回到启动程序的终端按回车。程序会把浏览器存储状态保存为 `storage_state.json`，然后开始读取商品页面。
+```powershell
+python main.py
+```
 
-之后再次运行时，程序会尝试复用这个状态。登录状态可能过期；若页面跳转到登录页或明确要求重新登录，程序会写入 `login_expired` 并停止。需要时可删除 `storage_state.json`，重新运行并手动登录。
+浏览器打开后，手动登录淘宝；登录好了回到 PowerShell 按回车就开始检查。第一次登录状态会保存在本机的 `storage_state.json`，之后会尽量复用。这样子很简单吧～(￣▽￣)／
 
-## 连接已登录的 Chrome
+### 想用已经登录的 Chrome？
 
-普通运行中的 Chrome 默认不开放自动化连接，所以脚本不会擅自接管或导航你当前打开的窗口。若要复用 Chrome，请双击项目中的 `launch_debug_chrome.bat`。它会另开一个专用 Chrome 窗口，并在启动失败时保留命令窗口显示错误。它不会关闭或修改你原来的 Chrome。首次需要在新窗口手动登录。登录完成后，在 PowerShell 运行：
+双击 `launch_debug_chrome.bat`，它会打开一个专用 Chrome 窗口。先在里面登录需要使用的电商网站，然后在另一个 PowerShell 窗口运行：
 
 ```powershell
 $env:TAOBAO_CDP_URL = "http://127.0.0.1:9222"
 .\.venv\Scripts\python.exe main.py
 ```
 
-这个调试配置使用单独的 Chrome 用户资料目录，第一次需要在该窗口手动登录。不要让两个 Chrome 同时使用同一个用户资料目录。连接模式会新建一个商品标签页，商品检查结束后关闭这个标签页，保留 Chrome 和原有标签页。若出现登录、验证或风控提示，会保留本次标签页供你手动处理。连接模式直接使用 Chrome 当前登录状态，不依赖 `storage_state.json`；未设置 `TAOBAO_CDP_URL` 时，程序使用独立浏览器和该状态文件。
+脚本会在这个 Chrome 里新开商品标签页，完成后关掉自己开的商品页，保留原有窗口和标签页。遇到需要你处理的页面时会把标签页留下。
 
-## 咨询期间刷新商家聊天页
+### 1688 咨询期间刷新聊天页
 
-先在上述带调试端口的 Chrome 中打开目标聊天会话，再在另一个 PowerShell 窗口运行：
+先在专用 Chrome 里打开要等回复的聊天，再运行：
 
 ```powershell
 $env:TAOBAO_CDP_URL = "http://127.0.0.1:9222"
 .\.venv\Scripts\python.exe main.py --watch-chat
 ```
 
-脚本会绑定当前唯一可见的 Chrome 标签页，每 60 秒刷新一次，默认运行 30 分钟；按 `Ctrl+C` 可提前停止。如果有多个可见标签页，它会列出编号并退出。确认聊天页编号后运行，例如：
+默认每分钟刷新一次，最多跑 30 分钟；按 `Ctrl+C` 可以提前结束。如果开着多个标签页，脚本会请你选聊天页编号，例如：
 
 ```powershell
 .\.venv\Scripts\python.exe main.py --watch-chat --chat-tab-index 3 --chat-minutes 60
 ```
 
-刷新前若页面有正在编辑或未发送的输入，本轮会跳过。遇到登录、验证码、风控或空白页面时会停止并保留聊天标签页。此模式不新建或关闭聊天标签页，不发送消息，也不自动判断商家是否回复；刷新后请在聊天正文核对店名和回复时间，不能仅凭标签页 URL 判断当前会话。若是你为咨询临时打开的聊天标签页，咨询结束后再关闭它。
+有没发送的输入内容时会跳过本轮刷新；遇到登录、验证码、风控或空白页会停下来。刷新后记得看看聊天正文和时间，别只看标签页名字猜商家回没回～
 
-`storage_state.json` 含有会话凭据，应像密码一样保管，不要上传到 Git、发给他人或放进共享文件夹。程序不要求你把密码提供给它。`output.json`、`output.csv`、`products.json` 和本机交接记录也已被 `.gitignore` 排除。使用 CDP 时只连接自己信任的本机 Chrome，不要把调试端口开放给其他设备。
+## 输出怎么看？
 
-## 运行
+每条记录包含：`title`、`price`、`sku_or_variant`、`url`、`checked_at`、`status`。结果会边处理边写到 `output.json` 和 `output.csv`。
 
-```powershell
-python main.py
-```
+常见状态：
 
-页面按顺序逐个打开，不会并发。商品之间会等待约 3–6 秒。遇到验证码、风控或登录失效会记录状态并停止；普通加载失败会记录 `load_error` 并跳过。状态值包括：
+- `ok`：读到了页面可见价格。
+- `price_not_found`：页面开了，但没认出价格。
+- `captcha`：遇到验证码或安全验证。
+- `risk_control`：页面提示访问异常或风控。
+- `login_expired`：需要重新登录。
+- `load_error`：页面没能正常加载。
 
-每条输出记录包含 `title`、`price`、`sku_or_variant`、`url`、`checked_at` 和 `status`。JSON 与 CSV 会在处理过程中更新。
+价格和规格以页面当时显示为准，偶尔也请肉眼复核一下。遇到验证码、风控或登录失效时，程序会记录情况并停下，不会尝试绕过。
 
-- `ok`：已读到可见价格。
-- `price_not_found`：页面打开了，但找不到匹配的可见售价。
-- `captcha`：页面出现验证码或安全验证。
-- `risk_control`：页面出现风控/访问异常提示。
-- `login_expired`：登录已失效或页面要求重新登录。
-- `load_error`：页面无法正常加载。
+## 页面改版后读不到价格？
 
-价格区间会尽量保留页面显示的区间格式；划线价会通过可见样式检查排除。商品规格只在 DOM 能明确识别已选项时填写，留空表示页面结构未能识别。
+打开 `main.py` 文件顶部，调整 `PRICE_SELECTORS`、`TITLE_SELECTORS` 和 `SKU_CONTAINER_SELECTORS` 这几组候选定位方式。改完可以先拿一个商品链接比对页面和输出，找到合适的选择器就好。
 
-## Selector 失效时改哪里
+## 小小的隐私提醒
 
-淘宝页面结构可能变化。打开 `main.py`，调整文件顶部的 `PRICE_SELECTORS`、`TITLE_SELECTORS` 和 `SKU_CONTAINER_SELECTORS`。这些 selector 只用于读取页面上可见的内容；价格读取还会跳过带删除线的元素。调整后请用少量链接人工核对页面和输出是否一致。若页面出现验证码或风控，不要通过修改 selector 或自动化逻辑继续访问。
+登录状态、你自己的商品链接和检查结果都留在本机，相关文件已经写进 `.gitignore`。`storage_state.json` 里有登录会话，别发给别人或传到仓库；程序也不需要你把密码交给它。CDP 调试端口只开在本机，别转给其他设备用。
 
-## 登录资料与隐私
-
-登录状态保存在本机的 `storage_state.json`，商品链接保存在本机的 `products.json`，结果保存在 `output.json` 和 `output.csv`。这些本地文件均被 `.gitignore` 排除，不应提交、分享或上传；登录状态文件含有会话凭据，请像密码一样保管。程序不需要你把账号密码交给它。
-
-`launch_debug_chrome.bat` 会启动使用独立用户资料目录的 Chrome，并把调试端口限制在本机 `127.0.0.1`。不要把该端口开放给其他设备，也不要让多个 Chrome 同时使用同一用户资料目录。
-
-## 许可与依赖
-
-本项目代码采用 MIT 许可证，详见 [LICENSE](LICENSE)。Playwright 是单独安装的第三方依赖，采用 Apache 2.0 许可证；本仓库不包含 Playwright 的源码。
+本项目代码使用 MIT 许可证，想学习、修改或再分享都可以，细节见 [LICENSE](LICENSE)。Playwright 是另外安装的浏览器工具，本仓库没有打包它的源码。
