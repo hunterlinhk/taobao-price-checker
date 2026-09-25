@@ -15,7 +15,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
@@ -27,10 +27,17 @@ STATE_FILE = BASE_DIR / "storage_state.json"
 JSON_FILE = BASE_DIR / "output.json"
 CSV_FILE = BASE_DIR / "output.csv"
 MAX_PRODUCTS = 5
+MAX_SKUS_PER_PRODUCT = 50
 CHAT_REFRESH_SECONDS = 60
 CHAT_WATCH_MINUTES = 30
 
-CSV_FIELDS = ["title", "price", "sku_or_variant", "url", "checked_at", "status"]
+CSV_FIELDS = [
+    "title", "price", "price_label", "sku_or_variant", "quantity",
+    "shipping", "shipping_label", "shipping_status", "ship_to",
+    "promotion_text", "url", "checked_at", "status",
+]
+SKU_GROUP_SELECTOR = '[class*="skuItem--"]'
+SKU_OPTION_SELECTOR = '[class*="valueItem--"][data-vid]'
 
 # Try several page structures. Keep these selectors easy to adjust when Taobao
 # changes its rendered markup. Every candidate is checked for visibility.
@@ -124,6 +131,14 @@ def now_iso() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
+def product_url_without_sku(url: str) -> str:
+    """Keep all-SKU results from linking every row to the input's initial SKU."""
+    parsed = urlparse(url)
+    query = [(key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+             if key.lower() != "skuid"]
+    return urlunparse(parsed._replace(query=urlencode(query)))
+
+
 def visible_text(locator, limit: int = 30) -> list[tuple[str, bool]]:
     """Return text plus a line-through flag for visible matching elements."""
     found: list[tuple[str, bool]] = []
@@ -168,15 +183,160 @@ def read_title(page) -> str:
         return ""
 
 
-def read_price(page) -> str:
+def read_price_details(page) -> tuple[str, str]:
+    # The current Taobao detail panel separates the highlighted payable display
+    # from its "before discount" comparison price. Prefer the highlighted block.
+    for selector in (
+        '#SkuPanel_tbpcDetail_ssr2025 [class*="highlightPrice--"]',
+        '[class*="normalPrice--"] [class*="highlightPrice--"]',
+    ):
+        for text, struck in visible_text(page.locator(selector), limit=5):
+            if not struck:
+                match = PRICE_RE.search(text)
+                if match:
+                    label = text[:match.start()].strip() or "页面标价"
+                    return match.group(0).strip(), label
+
     for selector in PRICE_SELECTORS:
         for text, struck in visible_text(page.locator(selector), limit=40):
             if struck:
                 continue
             match = PRICE_RE.search(text)
             if match:
-                return match.group(0).strip()
-    return ""
+                return match.group(0).strip(), "页面可见价格（待核对）"
+    return "", ""
+
+
+def read_price(page) -> str:
+    return read_price_details(page)[0]
+
+
+def _read_taobao_delivery(page) -> dict[str, str]:
+    """Read the visible product-page delivery quote without changing quantity."""
+    panel = page.locator("#SkuPanel_tbpcDetail_ssr2025")
+    freight = panel.locator('[class*="freight--"]').first
+    label = freight.inner_text(timeout=1200).strip() if freight.count() and freight.is_visible() else ""
+    if "免运费" in label or "包邮" in label:
+        shipping = "￥0"
+    else:
+        match = PRICE_RE.search(label)
+        shipping = match.group(0).strip() if match else ""
+    location = panel.locator('[class*="deliveryAddrWrap--"]').first
+    ship_to = " ".join(location.inner_text(timeout=1200).split()) if location.count() and location.is_visible() else ""
+    count = panel.locator('input[class*="countValue--"]').first
+    quantity = count.input_value(timeout=1200).strip() if count.count() and count.is_visible() else ""
+    try:
+        panel_text = panel.inner_text(timeout=1500)
+        promotion_match = re.search(r"券满\s*\d+(?:\.\d+)?\s*减\s*\d+(?:\.\d+)?", panel_text)
+        promotion = "".join(promotion_match.group(0).split()) if promotion_match else ""
+    except Exception:
+        promotion = ""
+    return {
+        "quantity": quantity,
+        "shipping": shipping,
+        "shipping_label": label,
+        "shipping_status": "ok" if shipping else "not_found",
+        "ship_to": ship_to,
+        "promotion_text": promotion,
+    }
+
+
+def read_taobao_delivery(page) -> dict[str, str]:
+    try:
+        return _read_taobao_delivery(page)
+    except Exception:
+        return {
+            "quantity": "", "shipping": "", "shipping_label": "",
+            "shipping_status": "read_error", "ship_to": "", "promotion_text": "",
+        }
+
+
+def selected_option(option) -> bool:
+    try:
+        return any(token.startswith("isSelected--") for token in (option.get_attribute("class") or "").split())
+    except Exception:
+        return False
+
+
+def sku_groups(page):
+    groups = []
+    for group in page.locator(SKU_GROUP_SELECTOR).all():
+        options = group.locator(SKU_OPTION_SELECTOR)
+        if options.count():
+            groups.append(group)
+    return groups
+
+
+def read_all_skus(page, url: str, title: str) -> list[dict[str, str]]:
+    """Read a one-dimensional SKU panel; refuse ambiguous multi-dimensional panels."""
+    url = product_url_without_sku(url)
+    groups = sku_groups(page)
+    if len(groups) != 1:
+        record = empty_record(url, "sku_layout_unsupported")
+        record["title"] = title
+        return [record]
+    group = groups[0]
+    guide = page.get_by_text("知道了", exact=True)
+    if guide.count() and guide.first.is_visible():
+        guide.first.click(timeout=3000)
+    options = group.locator(SKU_OPTION_SELECTOR)
+    count = options.count()
+    if count > MAX_SKUS_PER_PRODUCT:
+        record = empty_record(url, "sku_limit_exceeded")
+        record["title"] = title
+        return [record]
+
+    records = []
+    for index in range(count):
+        page_status = classify_page(page)
+        if page_status:
+            record = empty_record(url, page_status)
+            record["title"] = title
+            records.append(record)
+            break
+        option = group.locator(SKU_OPTION_SELECTOR).nth(index)
+        name = " ".join(option.inner_text(timeout=1500).split())
+        record = empty_record(url, "sku_not_selected")
+        record["title"] = title
+        record["sku_or_variant"] = name
+        if option.get_attribute("data-disabled") == "true":
+            record["status"] = "sku_unavailable"
+            records.append(record)
+            continue
+        try:
+            if not selected_option(option):
+                option.scroll_into_view_if_needed(timeout=3000)
+                option.click(timeout=5000)
+            page.wait_for_function(
+                """index => {
+                    const group = [...document.querySelectorAll('[class*="skuItem--"]')]
+                      .find(el => el.querySelector('[class*="valueItem--"][data-vid]'));
+                    const option = group?.querySelectorAll('[class*="valueItem--"][data-vid]')[index];
+                    return option && [...option.classList].some(c => c.startsWith('isSelected--'));
+                }""",
+                arg=index,
+                timeout=5000,
+            )
+            # Selection can update before the price request completes. Inspect
+            # twice after a short settling period; never accept a changing value.
+            page.wait_for_timeout(1000)
+            first = read_price_details(page)
+            page.wait_for_timeout(400)
+            second = read_price_details(page)
+            if first != second:
+                page.wait_for_timeout(800)
+                first, second = second, read_price_details(page)
+            if first == second and second[0]:
+                record["price"], record["price_label"] = second
+                record["status"] = "ok" if second[1] != "页面可见价格（待核对）" else "price_needs_review"
+                record.update(read_taobao_delivery(page))
+            else:
+                record["status"] = "price_not_stable" if second[0] else "price_not_found"
+        except Exception:
+            record["status"] = "sku_not_selected"
+        record["checked_at"] = now_iso()
+        records.append(record)
+    return records
 
 
 def read_variant(page) -> str:
@@ -217,7 +377,14 @@ def empty_record(url: str, status: str) -> dict[str, str]:
     return {
         "title": "",
         "price": "",
+        "price_label": "",
         "sku_or_variant": "",
+        "quantity": "",
+        "shipping": "",
+        "shipping_label": "",
+        "shipping_status": "",
+        "ship_to": "",
+        "promotion_text": "",
         "url": url,
         "checked_at": now_iso(),
         "status": status,
@@ -360,7 +527,7 @@ def watch_chat(tab_index: int | None, minutes: int) -> int:
         return 1
 
 
-def main() -> int:
+def main(all_skus: bool = False) -> int:
     try:
         urls = load_products()
     except ValueError as exc:
@@ -471,21 +638,30 @@ def main() -> int:
                     break
 
                 title = read_title(page)
-                price = read_price(page)
-                variant = read_variant(page)
-                status = "ok" if price else "price_not_found"
-                records.append(
-                    {
-                        "title": title,
-                        "price": price,
-                        "sku_or_variant": variant,
-                        "url": url,
-                        "checked_at": now_iso(),
-                        "status": status,
-                    }
-                )
+                if all_skus:
+                    product_records = read_all_skus(page, url, title)
+                    records.extend(product_records)
+                    print(f"完成：{len(product_records)} 条规格记录。")
+                else:
+                    price, price_label = read_price_details(page)
+                    variant = read_variant(page)
+                    status = "ok" if price and price_label != "页面可见价格（待核对）" else (
+                        "price_needs_review" if price else "price_not_found"
+                    )
+                    records.append(
+                        {
+                            "title": title,
+                            "price": price,
+                            "price_label": price_label,
+                            "sku_or_variant": variant,
+                            **read_taobao_delivery(page),
+                            "url": url,
+                            "checked_at": now_iso(),
+                            "status": status,
+                        }
+                    )
+                    print(f"完成：status={status}, price={price or '(未找到)'}")
                 save_records(records)
-                print(f"完成：status={status}, price={price or '(未找到)'}")
 
             print(f"结果已写入 {JSON_FILE.name} 和 {CSV_FILE.name}。")
             return 0
@@ -504,8 +680,12 @@ def main() -> int:
 
 
 def cli() -> int:
-    parser = argparse.ArgumentParser(description="检查商品页面价格，或在咨询期间定时刷新聊天页。")
+    parser = argparse.ArgumentParser(description="检查淘宝或 1688 商品价格、搜索 1688，或刷新聊天页。")
+    parser.add_argument("--search-1688", metavar="关键词", help="在 1688 站内搜索并逐页保存候选商品")
+    parser.add_argument("--max-pages", type=int, default=0, help="1688 搜索最多看几页；0 表示实际全部分页（最多 100 页）")
+    parser.add_argument("--check-1688", action="store_true", help="读取 products_1688.json 中的 1688 商品规格价格")
     parser.add_argument("--watch-chat", action="store_true", help="仅在咨询期间刷新当前 Chrome 聊天页")
+    parser.add_argument("--all-skus", action="store_true", help="逐个读取单规格组商品的全部规格价格")
     parser.add_argument("--chat-tab-index", type=int, help="聊天页在当前 Chrome 标签页列表中的编号")
     parser.add_argument(
         "--chat-minutes",
@@ -514,11 +694,24 @@ def cli() -> int:
         help=f"定时刷新持续分钟数，默认 {CHAT_WATCH_MINUTES} 分钟",
     )
     args = parser.parse_args()
+    search_requested = args.search_1688 is not None
+    modes = sum(bool(mode) for mode in (search_requested, args.check_1688, args.watch_chat))
+    if modes > 1 or (args.all_skus and modes):
+        parser.error("一次只能选择一种模式。")
+    if args.max_pages and not search_requested:
+        parser.error("--max-pages 需要与 --search-1688 一起使用。")
+    if search_requested or args.check_1688:
+        from market1688 import check_1688, search_1688
+        try:
+            return search_1688(args.search_1688, args.max_pages) if search_requested else check_1688()
+        except (ValueError, FileNotFoundError, RuntimeError, PlaywrightTimeoutError) as exc:
+            print(f"1688 检查未完成：{exc}", file=sys.stderr)
+            return 2
     if args.watch_chat:
         return watch_chat(args.chat_tab_index, args.chat_minutes)
     if args.chat_tab_index is not None or args.chat_minutes != CHAT_WATCH_MINUTES:
         parser.error("--chat-tab-index 和 --chat-minutes 需要与 --watch-chat 一起使用。")
-    return main()
+    return main(all_skus=args.all_skus)
 
 
 if __name__ == "__main__":

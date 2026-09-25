@@ -11,8 +11,13 @@ __pycache__/
 # Local accounts, browser sessions, and real browsing data.
 storage_state*.json
 products.json
+products_1688.json
 output.json
 output.csv
+search_1688.json
+search_1688.csv
+prices_1688.json
+prices_1688.csv
 HANDOFF.md
 
 # Browser diagnostics may contain page or account data.
