@@ -1,0 +1,17 @@
+storage_state.json
+.venv/
+__pycache__/
+*.pyc
+
+# Local accounts, browser sessions, and real browsing data.
+storage_state*.json
+products.json
+output.json
+output.csv
+HANDOFF.md
+
+# Browser diagnostics may contain page or account data.
+*.har
+*.trace
+chrome-profile/
+user-data/
